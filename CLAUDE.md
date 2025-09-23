@@ -4,34 +4,70 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Next.js 15 application called "prompt-maker" bootstrapped with `create-next-app` using TypeScript, React 19, and Tailwind CSS 4. The project uses the App Router architecture with the source code located in the `src/app/` directory.
+This is an AI-powered prompt generator application built with Next.js 15 that analyzes uploaded design images and generates professional coding prompts. The application supports multiple AI providers (Qwen, OpenAI, Claude) with a focus on visual analysis and prompt optimization.
 
 ## Development Commands
 
-- `npm run dev` - Start development server with Turbopack
-- `npm run build` - Build the application for production with Turbopack
-- `npm run start` - Start the production server
-- `npm run lint` - Run ESLint for code linting
+- `pnpm dev` - Start development server with Turbopack (preferred package manager)
+- `pnpm build` - Build the application for production with Turbopack
+- `pnpm start` - Start the production server
+- `pnpm lint` - Run ESLint for code linting
 
-## Architecture
+Note: Project uses pnpm as the package manager, not npm.
 
-- **Framework**: Next.js 15 with App Router
-- **UI**: React 19 with Tailwind CSS 4
-- **TypeScript**: Fully configured with strict typing
-- **Build Tool**: Turbopack for faster builds and development
-- **Styling**: Tailwind CSS with PostCSS configuration
+## Architecture Overview
 
-## Key Files and Structure
+### Tech Stack
+- **Framework**: Next.js 15 with App Router and Turbopack
+- **UI**: React 19, Tailwind CSS 4, Framer Motion for animations
+- **AI Integration**: Vercel AI SDK with multi-provider support
+- **Type Safety**: TypeScript with Zod validation
+- **Icons**: Lucide React
 
-- `src/app/page.tsx` - Main homepage component
-- `src/app/layout.tsx` - Root layout component
-- `src/app/globals.css` - Global styles with Tailwind directives
-- `eslint.config.mjs` - ESLint configuration extending Next.js rules
-- `next.config.ts` - Next.js configuration (minimal setup)
+### Multi-Provider AI System
 
-## Development Notes
+The application implements a sophisticated multi-provider AI architecture:
 
-- The project uses modern React 19 features
-- Turbopack is enabled for both development and build processes
-- ESLint is configured with Next.js recommended rules and TypeScript support
-- The application follows Next.js App Router conventions
+1. **Provider Abstraction**: `src/app/api/generate-prompt/route.ts` handles provider selection and fallback
+2. **Custom Clients**:
+   - `src/lib/qwen-client.ts` - Custom Qwen vision API client
+   - AI SDK handles OpenAI and Anthropic providers
+3. **Settings Management**: Client-side localStorage for API keys and provider preferences
+4. **Fallback System**: Automatic provider switching when APIs are unavailable
+
+### Component Architecture
+
+- **ImageUploader** (`src/components/ImageUploader.tsx`) - Drag-and-drop image upload with preview
+- **PromptDisplay** (`src/components/PromptDisplay.tsx`) - Terminal-style prompt display with copy/export
+- **SettingsPanel** (`src/components/SettingsPanel.tsx`) - Modal for AI provider configuration
+- **Main Page** (`src/app/page.tsx`) - Orchestrates the entire application flow
+
+### Environment Configuration
+
+Copy `.env.example` to `.env.local` and configure:
+- `QWEN_API_KEY` - 通义千问 API key (default provider)
+- `OPENAI_API_KEY` - OpenAI API key (optional)
+- `ANTHROPIC_API_KEY` - Claude API key (optional)
+- `DEFAULT_AI_PROVIDER` - Default provider selection
+
+### Key Design Patterns
+
+1. **Provider Strategy Pattern**: API route dynamically selects AI provider based on availability
+2. **Client-Side Preferences**: Settings persist in localStorage for seamless user experience
+3. **Optimistic UI**: Loading states and error boundaries for smooth interactions
+4. **Responsive Design**: Mobile-first approach with scientific/tech aesthetic
+
+### API Integration Details
+
+- **Qwen Integration**: Uses compatible-mode endpoint with OpenAI-style message format
+- **Image Processing**: Base64 encoding for vision API compatibility
+- **Error Handling**: Comprehensive error messages and fallback mechanisms
+- **Rate Limiting**: Built-in retry logic and graceful degradation
+
+### Development Notes
+
+- Project uses Framer Motion extensively for animations
+- All components follow dark theme with gradient overlays
+- Settings panel supports real-time provider switching
+- Image upload supports drag-and-drop with file validation
+- Prompt generation includes metadata and export functionality
