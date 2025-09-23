@@ -1,0 +1,468 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { openai } from '@ai-sdk/openai'
+import { generateObject } from 'ai'
+import { z } from 'zod'
+import { QwenClient } from '@/lib/qwen-client'
+
+// Schema for structured prompt generation
+const promptSchema = z.object({
+  projectType: z.enum(['ui-design', 'architecture', 'dashboard', 'mobile-app', 'data-flow']),
+  techStack: z.object({
+    frontend: z.string(),
+    backend: z.string().optional(),
+    database: z.string().optional(),
+    styling: z.string()
+  }),
+  promptContent: z.object({
+    overview: z.string(),
+    requirements: z.array(z.string()),
+    implementation: z.array(z.object({
+      step: z.number(),
+      title: z.string(),
+      description: z.string()
+    })),
+    bestPractices: z.array(z.string()),
+    testing: z.string()
+  })
+})
+
+export async function POST(request: NextRequest) {
+  try {
+    const { image, fileName, provider } = await request.json()
+
+    if (!image) {
+      return NextResponse.json(
+        { error: 'Please provide image data' },
+        { status: 400 }
+      )
+    }
+
+    // Determine which AI provider to use
+    const aiProvider = provider || process.env.DEFAULT_AI_PROVIDER || 'qwen'
+
+    try {
+      let analysisResult
+
+      if (aiProvider === 'qwen') {
+        analysisResult = await analyzeWithQwen(image, fileName)
+      } else if (aiProvider === 'openai') {
+        analysisResult = await analyzeWithOpenAI(image)
+      } else {
+        throw new Error(`Unsupported AI provider: ${aiProvider}`)
+      }
+
+      return NextResponse.json({
+        prompt: analysisResult,
+        provider: aiProvider,
+        success: true
+      })
+
+    } catch (aiError) {
+      console.error(`AI analysis failed with ${aiProvider}:`, aiError)
+
+      // Fallback to enhanced mock response
+      return generateFallbackPrompt(fileName, aiProvider)
+    }
+
+  } catch (error) {
+    console.error('Error in generate-prompt API:', error)
+    return NextResponse.json(
+      { error: 'Failed to generate prompt. Please try again.' },
+      { status: 500 }
+    )
+  }
+}
+
+async function analyzeWithQwen(image: string, fileName: string): Promise<string> {
+  const qwenApiKey = process.env.QWEN_API_KEY
+
+  if (!qwenApiKey) {
+    throw new Error('Qwen API key not configured')
+  }
+
+  const qwenClient = new QwenClient(qwenApiKey)
+
+  const prompt = `作为一名资深的软件架构师和全栈开发工程师，请仔细分析这张图片，它可能是：
+1. UI/UX 设计稿
+2. 系统架构图
+3. 数据流程图
+4. 移动应用界面
+5. 仪表板设计
+
+请按照以下格式生成详细的开发提示词：
+
+# 项目分析与开发指南
+
+## 项目概述
+[详细描述图片展示的项目类型、主要功能和设计特点]
+
+## 推荐技术栈
+- **前端框架**: [根据项目特点推荐合适的前端技术]
+- **后端技术**: [如果需要后端，推荐合适的技术栈]
+- **数据库**: [根据数据需求推荐数据库方案]
+- **样式方案**: [推荐合适的CSS解决方案]
+
+## 技术要求
+[列出具体的技术实现要求，每项一行，用"-"开头]
+
+## 实现步骤
+[提供详细的分步实现指南，包含：]
+### 1. [步骤标题]
+[详细的实施说明]
+
+### 2. [步骤标题]
+[详细的实施说明]
+
+[继续其他步骤...]
+
+## 最佳实践
+[列出开发过程中应该遵循的最佳实践]
+
+## 测试策略
+[提供完整的测试方案]
+
+请确保内容专业、详细且可执行。文件名提示：${fileName}`
+
+  const analysis = await qwenClient.analyzeImage(image, prompt)
+  return analysis
+}
+
+async function analyzeWithOpenAI(image: string): Promise<string> {
+  const openaiApiKey = process.env.OPENAI_API_KEY
+
+  if (!openaiApiKey) {
+    throw new Error('OpenAI API key not configured')
+  }
+
+  const result = await generateObject({
+    model: openai('gpt-4o'),
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: `Analyze this design/architecture image and generate a comprehensive coding prompt.
+
+            Instructions:
+            1. Identify the type of project (UI design, system architecture, dashboard, mobile app, or data flow)
+            2. Suggest appropriate tech stack based on what you see
+            3. Create detailed implementation steps
+            4. Include best practices and testing strategies
+
+            Focus on being practical and actionable for developers.`
+          },
+          {
+            type: 'image',
+            image: image
+          }
+        ]
+      }
+    ],
+    schema: promptSchema,
+    temperature: 0.7,
+  })
+
+  return formatPrompt(result.object)
+}
+
+function formatPrompt(analysis: z.infer<typeof promptSchema>): string {
+  const { projectType, techStack, promptContent } = analysis
+
+  return `# ${getProjectTypeTitle(projectType)} Development Prompt
+
+## Project Overview
+${promptContent.overview}
+
+## Recommended Tech Stack
+- **Frontend**: ${techStack.frontend}
+${techStack.backend ? `- **Backend**: ${techStack.backend}` : ''}
+${techStack.database ? `- **Database**: ${techStack.database}` : ''}
+- **Styling**: ${techStack.styling}
+
+## Technical Requirements
+${promptContent.requirements.map(req => `- ${req}`).join('\n')}
+
+## Implementation Steps
+
+${promptContent.implementation.map(step =>
+  `### ${step.step}. ${step.title}
+${step.description}`
+).join('\n\n')}
+
+## Best Practices
+${promptContent.bestPractices.map(practice => `- ${practice}`).join('\n')}
+
+## Testing Strategy
+${promptContent.testing}
+
+---
+*Generated by AI • Ready for coding assistant*`
+}
+
+function getProjectTypeTitle(type: string): string {
+  const titles = {
+    'ui-design': 'UI/UX Design Implementation',
+    'architecture': 'System Architecture Development',
+    'dashboard': 'Dashboard Application',
+    'mobile-app': 'Mobile Application',
+    'data-flow': 'Data Flow Implementation'
+  }
+  return titles[type as keyof typeof titles] || 'Application Development'
+}
+
+function generateFallbackPrompt(fileName: string, provider: string = 'fallback') {
+  // Enhanced fallback logic with provider info
+  const isUI = /ui|design|界面|设计|mockup|wireframe/i.test(fileName)
+  const isArchitecture = /arch|架构|系统|流程|system|flow/i.test(fileName)
+  const isDashboard = /dashboard|仪表板|控制台|admin|panel/i.test(fileName)
+  const isMobile = /mobile|app|ios|android|手机/i.test(fileName)
+
+  let prompt = ''
+
+  if (isDashboard) {
+    prompt = `# 数据仪表板开发指南
+
+## 项目概述
+基于上传的界面设计图，开发一个现代化的数据仪表板应用，支持实时数据展示和交互分析。
+
+## 推荐技术栈
+- **前端框架**: React 18+ 配合 TypeScript
+- **后端技术**: Node.js + Express 或 Next.js API Routes
+- **数据库**: PostgreSQL + Redis 缓存
+- **样式方案**: Tailwind CSS + shadcn/ui 组件库
+
+## 技术要求
+- 响应式设计，支持桌面端和平板设备
+- 实时数据更新，使用 WebSocket 连接
+- 交互式图表和数据可视化组件
+- 用户认证和基于角色的访问控制
+- 数据过滤和搜索功能
+- 支持导出功能（PDF、Excel、CSV）
+
+## 实现步骤
+
+### 1. 项目架构搭建
+配置 TypeScript 开发环境，设置构建工具，建立项目结构并实现关注点分离的架构设计。
+
+### 2. 数据库设计与API开发
+设计仪表板数据的数据库架构，实现数据操作的 RESTful API，建立实时数据流传输机制。
+
+### 3. UI组件开发
+创建可复用的仪表板组件，包括图表、数据表格、过滤器和导航元素，严格按照设计规范实现。
+
+### 4. 数据集成与可视化
+实现数据获取逻辑，集成图表库（Chart.js 或 D3.js），确保在各种设备上都能响应式显示数据可视化。
+
+### 5. 用户体验与性能优化
+添加加载状态、错误处理、数据缓存策略，通过代码分割和懒加载优化性能表现。
+
+## 最佳实践
+- 为所有数据结构实施适当的 TypeScript 类型定义
+- 使用 React Query 或 SWR 进行高效的数据获取和缓存
+- 遵循无障碍访问指南 (WCAG 2.1)
+- 实施全面的错误边界处理
+- 使用性能监控和分析工具
+- 维护一致的设计系统和组件库
+
+## 测试策略
+为工具函数和钩子实施单元测试，为 API 端点进行集成测试，为关键用户工作流实施端到端测试。包含仪表板组件的视觉回归测试。`
+  } else if (isMobile) {
+    prompt = `# 移动应用开发指南
+
+## 项目概述
+基于提供的设计规范开发跨平台移动应用，专注于原生性能和优秀的用户体验。
+
+## 推荐技术栈
+- **开发框架**: React Native + Expo 或 Flutter
+- **状态管理**: Redux Toolkit 或 Zustand
+- **后端服务**: Firebase 或自定义 Node.js API
+- **样式方案**: NativeWind 或 styled-components
+
+## 技术要求
+- 跨平台兼容性（iOS 和 Android）
+- 离线功能和数据同步
+- 推送通知和深度链接
+- 生物识别认证支持
+- 相机和媒体处理功能
+- 针对低端设备的性能优化
+
+## 实现步骤
+
+### 1. 环境配置与项目结构
+配置移动开发环境，设置测试设备/模拟器，建立项目架构。
+
+### 2. 核心导航与界面开发
+实现导航结构，创建主要界面组件，在整个应用中建立一致的 UI 模式。
+
+### 3. 数据管理与API集成
+设置状态管理，实现带有适当错误处理的 API 集成，添加离线数据持久化。
+
+### 4. 平台特定功能
+集成设备特定功能如相机、位置服务和通知，确保适当的权限处理。
+
+### 5. 测试与部署
+实施全面测试，优化应用性能，准备 App Store 和 Google Play 部署。
+
+## 最佳实践
+- 遵循平台特定的设计指南（Material Design/Human Interface Guidelines）
+- 实施适当的状态管理模式
+- 使用 TypeScript 确保类型安全
+- 为移动设备优化图像和资源
+- 为敏感数据实施适当的安全措施
+- 为关键流程使用自动化测试
+
+## 测试策略
+业务逻辑的单元测试，API 调用的集成测试，以及跨不同屏幕尺寸和操作系统版本的设备测试。`
+  } else if (isUI) {
+    prompt = `# UI/UX 界面实现指南
+
+## 项目概述
+将提供的 UI/UX 设计转换为功能齐全、响应式的 Web 应用，采用现代开发实践和最佳用户体验。
+
+## 推荐技术栈
+- **前端框架**: React 18+ 配合 TypeScript
+- **样式方案**: Tailwind CSS + CSS-in-JS 用于动态样式
+- **组件库**: Radix UI 或 Headless UI 确保无障碍访问
+- **动画效果**: Framer Motion 提供流畅交互
+
+## 技术要求
+- 像素级完美实现，匹配设计规范
+- 移动端、平板和桌面的响应式设计
+- 流畅的动画和微交互
+- 无障碍访问合规 (WCAG 2.1 AA)
+- 跨浏览器兼容性
+- 语义化 HTML 的 SEO 优化
+
+## 实现步骤
+
+### 1. 设计系统和组件库
+分析设计以提取色彩方案、字体、间距和组件模式。创建具有可复用组件的设计系统。
+
+### 2. 布局和响应式结构
+实现网格系统和布局结构，使用 CSS Grid 和 Flexbox 确保在所有设备尺寸上的响应式行为。
+
+### 3. 组件开发和样式
+构建具有适当 TypeScript 接口的单个 UI 组件，使用 Tailwind CSS 实现样式，确保组件可复用性。
+
+### 4. 交互和动画实现
+使用 Framer Motion 添加悬停效果、过渡和动画，实现表单验证和用户反馈机制。
+
+### 5. 性能和无障碍访问优化
+优化图像和资源，实现懒加载，确保键盘导航，为屏幕阅读器添加适当的 ARIA 标签。
+
+## 最佳实践
+- 为更好的无障碍访问使用语义化 HTML 元素
+- 实施 CSS 自定义属性用于主题化
+- 遵循组件组合模式
+- 使用 TypeScript 进行属性验证和 IntelliSense
+- 实施错误边界以实现健壮的错误处理
+- 通过代码分割优化包大小
+
+## 测试策略
+视觉回归测试确保设计准确性，使用屏幕阅读器进行无障碍访问测试，跨浏览器兼容性测试。`
+  } else if (isArchitecture) {
+    prompt = `# 系统架构实现指南
+
+## 项目概述
+基于提供的架构图实现可扩展的系统架构，专注于可维护性、性能和可靠性。
+
+## 推荐技术栈
+- **后端技术**: Node.js + Express 或 Python + FastAPI
+- **数据库**: PostgreSQL + Redis 缓存
+- **消息队列**: RabbitMQ 或 Apache Kafka 用于异步处理
+- **容器化**: Docker + Kubernetes 用于编排
+- **监控**: Prometheus + Grafana 用于可观测性
+
+## 技术要求
+- 具有适当服务边界的微服务架构
+- 用于请求路由和认证的 API 网关
+- 具有适当索引和关系的数据库设计
+- 重型操作的异步处理
+- 全面的日志记录和监控
+- 自动化测试和 CI/CD 流水线
+
+## 实现步骤
+
+### 1. 基础设施和服务设置
+建立开发环境，使用 Docker 配置容器化，建立基本服务结构。
+
+### 2. 数据库设计和数据层
+设计数据库架构，实现数据访问模式，设置连接池和数据库迁移。
+
+### 3. API 开发和服务通信
+开发 RESTful API，实现服务间通信，设置用于请求管理的 API 网关。
+
+### 4. 认证和安全实现
+实施基于 JWT 的认证，设置基于角色的访问控制，确保服务间的安全通信。
+
+### 5. 监控和部署设置
+配置日志记录和监控系统，设置 CI/CD 流水线，实施健康检查和错误报告。
+
+## 最佳实践
+- 遵循 SOLID 原则和清洁架构模式
+- 实施适当的错误处理和日志记录
+- 为架构变更使用数据库迁移
+- 实施 API 版本化策略
+- 遵循安全最佳实践 (OWASP 指南)
+- 使用基于环境的配置管理
+
+## 测试策略
+业务逻辑的单元测试，API 端点的集成测试，服务通信的契约测试，性能验证的负载测试。`
+  } else {
+    // 通用开发提示词
+    prompt = `# 应用开发指南
+
+## 项目概述
+基于上传的图片内容，开发一个现代化的 Web 应用，实现所展示的功能，采用当前最佳实践和可扩展架构。
+
+## 推荐技术栈
+- **前端**: React 18+ 配合 TypeScript 和 Next.js
+- **后端**: Next.js API Routes 或 Node.js + Express
+- **数据库**: PostgreSQL 或 MongoDB（根据数据需求）
+- **样式**: Tailwind CSS 快速开发
+
+## 技术要求
+- 现代化、响应式用户界面
+- TypeScript 类型安全开发
+- 高效的状态管理
+- 带有适当错误处理的 API 集成
+- SEO 优化和性能最佳实践
+- 全面的测试覆盖
+
+## 实现步骤
+
+### 1. 项目设置和配置
+使用 TypeScript 和 ESLint 初始化项目，配置开发工具，建立基本项目结构。
+
+### 2. 核心组件开发
+构建主要应用组件，实现路由和导航，建立组件层次结构。
+
+### 3. 数据管理和 API 集成
+设置状态管理，实现带有适当错误处理的 API 调用，添加数据验证和缓存。
+
+### 4. UI 优化和用户体验
+添加加载状态、错误消息、动画，确保在所有设备上的响应式设计。
+
+### 5. 测试和部署准备
+编写全面测试，优化性能，准备生产部署。
+
+## 最佳实践
+- 使用 TypeScript 确保类型安全和更好的开发体验
+- 实施适当的错误边界和错误处理
+- 遵循 React 组件设计的最佳实践
+- 使用语义化 HTML 确保无障碍访问
+- 实施适当的 SEO 策略
+- 维护一致的代码风格和文档
+
+## 测试策略
+组件和工具的单元测试，用户工作流的集成测试，关键路径的端到端测试。`
+  }
+
+  return NextResponse.json({
+    prompt,
+    provider: provider + ' (fallback)',
+    success: true,
+    fallback: true
+  })
+}
