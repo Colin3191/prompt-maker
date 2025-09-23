@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Settings, Eye, EyeOff, Key, ExternalLink, Brain } from "lucide-react"
+import { Settings, Eye, EyeOff, ExternalLink, Brain } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 
 interface SettingsPanelProps {

@@ -20,7 +20,7 @@ export interface QwenVisionRequest {
     temperature?: number;
     stop?: string[];
     incremental_output?: boolean;
-    tools?: any[];
+    tools?: unknown[];
   };
 }
 
