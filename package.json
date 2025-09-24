@@ -2,6 +2,7 @@
   "name": "prompt-maker",
   "version": "0.1.0",
   "private": true,
+  "homepage": "https://prompt.v100.cloud",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",

@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react"
 import { Upload, Image as ImageIcon, X, Zap, Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { AIService } from "@/lib/ai-clients"
 
 interface ImageUploaderProps {
   onPromptGenerated: (prompt: string) => void
@@ -66,34 +67,20 @@ export default function ImageUploader({ onPromptGenerated, setIsLoading }: Image
 
     setIsLoading(true)
     try {
-      const response = await fetch('/api/generate-prompt', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          image: uploadedImage,
-          fileName: fileName
-        }),
-      })
+      const config = AIService.getStoredConfig()
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to generate prompt')
+      if (!config) {
+        const errorMsg = '请先在设置面板中配置AI服务提供商和API密钥'
+        alert(errorMsg)
+        setIsLoading(false)
+        return
       }
 
-      const data = await response.json()
-
-      // Check if this is using fallback mode
-      if (data.fallback) {
-        console.warn('Using fallback prompt generation (OpenAI API not configured)')
-      }
-
-      onPromptGenerated(data.prompt)
+      const prompt = await AIService.analyzeImage(config, uploadedImage, fileName)
+      onPromptGenerated(prompt)
     } catch (error) {
       console.error('Error generating prompt:', error)
 
-      // Show user-friendly error message
       const errorMessage = error instanceof Error
         ? error.message
         : 'Error generating prompt, please try again'

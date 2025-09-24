@@ -4,7 +4,6 @@ import { generateObject } from 'ai'
 import { z } from 'zod'
 import { QwenClient } from '@/lib/qwen-client'
 
-// Schema for structured prompt generation
 const promptSchema = z.object({
   projectType: z.enum(['ui-design', 'architecture', 'dashboard', 'mobile-app', 'data-flow']),
   techStack: z.object({
@@ -37,7 +36,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Determine which AI provider to use
     const aiProvider = provider || process.env.DEFAULT_AI_PROVIDER || 'qwen'
 
     try {
@@ -60,7 +58,6 @@ export async function POST(request: NextRequest) {
     } catch (aiError) {
       console.error(`AI analysis failed with ${aiProvider}:`, aiError)
 
-      // Fallback to enhanced mock response
       return generateFallbackPrompt(fileName, aiProvider)
     }
 

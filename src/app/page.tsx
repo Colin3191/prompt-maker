@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { motion } from "framer-motion"
+import { GithubIcon } from "@/components/icons/GithubIcon"
 import ImageUploader from "@/components/ImageUploader"
 import PromptDisplay from "@/components/PromptDisplay"
 import SettingsPanel from "@/components/SettingsPanel"
@@ -29,6 +30,18 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-black relative overflow-hidden">
+      {/* GitHub Link */}
+      <motion.a
+        href="https://github.com/Colin3191/prompt-maker"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed top-6 left-6 z-50 p-3 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl hover:bg-white/20 transition-colors group"
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+      >
+        <GithubIcon className="w-5 h-5 text-white group-hover:text-blue-400 transition-colors" />
+      </motion.a>
+
       {/* Settings Panel */}
       <SettingsPanel
         onApiKeyChange={handleApiKeyChange}
