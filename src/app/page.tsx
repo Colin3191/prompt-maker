@@ -2,34 +2,73 @@
 
 import { useState } from "react"
 import { motion } from "framer-motion"
+import Image from "next/image"
+import { signIn, signOut, useSession } from "next-auth/react"
 import { GithubIcon } from "@/components/icons/GithubIcon"
 import ImageUploader from "@/components/ImageUploader"
 import PromptDisplay from "@/components/PromptDisplay"
-import SettingsPanel from "@/components/SettingsPanel"
 
 export default function Home() {
+  const { data: session, status } = useSession()
   const [generatedPrompt, setGeneratedPrompt] = useState<string>("")
   const [isLoading, setIsLoading] = useState(false)
+  const isAuthenticated = status === "authenticated"
+  const isSessionLoading = status === "loading"
 
   const handlePromptGenerated = (prompt: string) => {
     setGeneratedPrompt(prompt)
   }
 
-  const handleApiKeyChange = (provider: string, apiKey: string) => {
-    // Store API key in localStorage for client-side use
-    if (apiKey) {
-      localStorage.setItem(`${provider}_api_key`, apiKey)
-    } else {
-      localStorage.removeItem(`${provider}_api_key`)
-    }
+  const handleSignOut = () => {
+    signOut({ callbackUrl: "/login" })
   }
 
-  const handleProviderChange = (provider: string) => {
-    localStorage.setItem('ai_provider', provider)
+  const handleSignIn = () => {
+    signIn("github", { callbackUrl: "/" })
+  }
+
+  const handleRequireAuth = () => {
+    alert("请先登录以使用提示词生成功能")
   }
 
   return (
     <div className="min-h-screen bg-black relative overflow-hidden">
+      {/* Account */}
+      {isAuthenticated && session ? (
+        <motion.button
+          onClick={handleSignOut}
+          className="fixed top-6 right-6 z-50 flex items-center gap-3 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm transition-colors hover:bg-white/20"
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+        >
+          {session.user?.image ? (
+            <Image
+              src={session.user.image}
+              alt={session.user.name ?? "GitHub user"}
+              width={24}
+              height={24}
+              className="h-6 w-6 rounded-full object-cover"
+            />
+          ) : (
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 text-xs font-semibold uppercase">
+              {session.user?.name?.[0]?.toUpperCase() ?? session.user?.email?.[0]?.toUpperCase() ?? "U"}
+            </span>
+          )}
+          <span>Sign out</span>
+        </motion.button>
+      ) : (
+        <motion.button
+          onClick={handleSignIn}
+          disabled={isSessionLoading}
+          className="fixed top-6 right-6 z-50 flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm transition-colors hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+        >
+          <GithubIcon className="w-4 h-4" />
+          <span>{isSessionLoading ? "Loading" : "Login"}</span>
+        </motion.button>
+      )}
+
       {/* GitHub Link */}
       <motion.a
         href="https://github.com/Colin3191/prompt-maker"
@@ -41,12 +80,6 @@ export default function Home() {
       >
         <GithubIcon className="w-5 h-5 text-white group-hover:text-blue-400 transition-colors" />
       </motion.a>
-
-      {/* Settings Panel */}
-      <SettingsPanel
-        onApiKeyChange={handleApiKeyChange}
-        onProviderChange={handleProviderChange}
-      />
 
       {/* Background Grid */}
       <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:50px_50px]" />
@@ -171,10 +204,12 @@ export default function Home() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.8, delay: 0.7 }}
             >
-              <ImageUploader
-                onPromptGenerated={handlePromptGenerated}
-                setIsLoading={setIsLoading}
-              />
+            <ImageUploader
+              onPromptGenerated={handlePromptGenerated}
+              setIsLoading={setIsLoading}
+              isAuthenticated={isAuthenticated}
+              onRequireAuth={handleRequireAuth}
+            />
             </motion.div>
 
             {/* Right Side - Generated Prompt */}

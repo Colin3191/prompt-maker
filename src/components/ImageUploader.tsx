@@ -3,14 +3,20 @@
 import { useState, useCallback } from "react"
 import { Upload, Image as ImageIcon, X, Zap, Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { AIService } from "@/lib/ai-clients"
 
 interface ImageUploaderProps {
   onPromptGenerated: (prompt: string) => void
   setIsLoading: (loading: boolean) => void
+  isAuthenticated?: boolean
+  onRequireAuth?: () => void
 }
 
-export default function ImageUploader({ onPromptGenerated, setIsLoading }: ImageUploaderProps) {
+export default function ImageUploader({
+  onPromptGenerated,
+  setIsLoading,
+  isAuthenticated = false,
+  onRequireAuth,
+}: ImageUploaderProps) {
   const [dragActive, setDragActive] = useState(false)
   const [uploadedImage, setUploadedImage] = useState<string | null>(null)
   const [fileName, setFileName] = useState<string>("")
@@ -65,25 +71,32 @@ export default function ImageUploader({ onPromptGenerated, setIsLoading }: Image
   const generatePrompt = async () => {
     if (!uploadedImage) return
 
+    if (!isAuthenticated) {
+      onRequireAuth?.()
+      return
+    }
+
     setIsLoading(true)
     try {
-      const config = AIService.getStoredConfig()
+      const response = await fetch("/api/generate-prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: uploadedImage, fileName }),
+      })
 
-      if (!config) {
-        const errorMsg = '请先在设置面板中配置AI服务提供商和API密钥'
-        alert(errorMsg)
-        setIsLoading(false)
-        return
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "生成提示词失败，请稍后重试")
       }
 
-      const prompt = await AIService.analyzeImage(config, uploadedImage, fileName)
-      onPromptGenerated(prompt)
+      onPromptGenerated(data.prompt)
     } catch (error) {
       console.error('Error generating prompt:', error)
 
       const errorMessage = error instanceof Error
         ? error.message
-        : 'Error generating prompt, please try again'
+        : '生成提示词失败，请稍后重试'
 
       alert(errorMessage)
     } finally {
